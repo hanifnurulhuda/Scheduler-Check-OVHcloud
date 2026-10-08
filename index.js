@@ -23,7 +23,7 @@ export async function getStock(plan, fetchFn = fetch) {
 }
 
 export async function sendTelegram(plan, token, chatId, fetchFn = fetch) {
-  await sendMessage(`Stok VPS OVH tersedia!\n${plan.label}\nPlan: ${plan.code}\nLokasi: Singapore (ap-southeast-sgp)\nOS: Ubuntu 2026.04\nhttps://www.ovhcloud.com/en/vps/`, token, chatId, fetchFn);
+  await sendMessage(`Stok VPS OVH tersedia!\n${plan.label}\nPlan: ${plan.code}\nLokasi: Singapore (ap-southeast-sgp)\nOS: Ubuntu 2026.04\nJumlah stok: tidak tersedia dari API OVH\nhttps://www.ovhcloud.com/en/vps/`, token, chatId, fetchFn);
 }
 
 async function sendMessage(text, token, chatId, fetchFn = fetch) {
@@ -103,17 +103,14 @@ async function listenCommands(token, chatId, health) {
   }
 }
 
-export async function checkStocks(notified, token, chatId, fetchFn = fetch, log = console.log) {
+export async function checkStocks(token, chatId, fetchFn = fetch, log = console.log) {
   let failed = false;
   for (const plan of plans) {
     try {
       const status = await getStock(plan, fetchFn);
       log(`${new Date().toISOString()} ${plan.code}: ${status}`);
-      if (status === 'out-of-stock') {
-        notified.delete(plan.code);
-      } else if (status === 'available' && !notified.has(plan.code)) {
+      if (status === 'available') {
         await sendTelegram(plan, token, chatId, fetchFn);
-        notified.add(plan.code);
         log(`${plan.code}: notifikasi terkirim`);
       }
     } catch (error) {
@@ -134,13 +131,12 @@ async function main() {
   if (!Number.isSafeInteger(interval) || interval < 10 || interval > 86400) {
     throw new Error('CHECK_INTERVAL_SECONDS harus bilangan bulat 10–86400');
   }
-  const notified = new Set();
   const once = process.argv.includes('--once');
   const health = { interval, checking: false, lastCheck: null, lastSuccess: null };
   if (!once) void listenCommands(token, chatId, health);
   do {
     health.checking = true;
-    const success = await checkStocks(notified, token, chatId);
+    const success = await checkStocks(token, chatId);
     health.checking = false;
     health.lastCheck = new Date().toISOString();
     health.lastSuccess = success;

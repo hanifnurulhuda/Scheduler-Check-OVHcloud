@@ -1,69 +1,72 @@
-# Cek stok VPS OVH Singapore
+# OVH Singapore VPS Stock Monitor
 
-Node.js 22+, tanpa dependency. Kode aplikasi hanya `index.js`.
+Node.js 22+, no dependencies. All application code is in `index.js`.
 
-Memantau Ubuntu 2026.04 di `ap-southeast-sgp`:
+Monitors Ubuntu 2026.04 availability in `ap-southeast-sgp`:
 
-| Plan | Spesifikasi |
+| Plan | Specifications |
 | --- | --- |
 | `vps-2027-model2` | 4 core / 8 GB RAM |
 | `vps-2027-model3` | 6 core / 12 GB RAM |
 
-Telegram hanya dikirim jika `linuxStatus` persis `available`. Status Windows,
-lokasi lain, status tidak dikenal, dan stok kosong tidak memicu notifikasi.
-Pesan berisi spesifikasi, lokasi, OS, dan https://www.ovhcloud.com/en/vps/.
+Telegram notifications are sent only when `linuxStatus` is exactly `available`.
+Windows availability, other locations, unknown statuses, and out-of-stock results
+do not trigger notifications. Messages include specifications, location, OS,
+and https://www.ovhcloud.com/en/vps/.
 
-## Konfigurasi
+## Configuration
 
-1. Salin `.env.example` menjadi `.env`.
-2. Buat bot lewat `@BotFather` di Telegram. Isi token pada `TELEGRAM_BOT_TOKEN`.
-3. Kirim `/start` ke bot. Dapatkan chat ID dari `getUpdates` Telegram Bot API,
-   lalu isi `TELEGRAM_CHAT_ID`. Untuk grup, tambahkan bot lalu kirim perintah ke bot di grup.
-4. Atur `CHECK_INTERVAL_SECONDS`, default 60, rentang 10–86400 detik.
-5. Jalankan `npm start` untuk monitoring, atau `npm run check` untuk sekali cek.
+1. Copy `.env.example` to `.env`.
+2. Create a bot through `@BotFather` on Telegram. Set `TELEGRAM_BOT_TOKEN` to its token.
+3. Send `/start` to the bot. Obtain your chat ID using the Telegram Bot API's
+    `getUpdates` method, then set `TELEGRAM_CHAT_ID`. For groups, add the bot and
+    send it a command in the group.
+4. Set `CHECK_INTERVAL_SECONDS`: default 60, allowed range 10–86400 seconds.
+5. Run `npm start` for continuous monitoring, or `npm run check` for a single check.
 
-Jangan bagikan token, URL API yang memuat token, atau commit `.env`.
-`npm run check` juga mengirim Telegram jika stok tersedia, bukan mode simulasi.
+Do not share the token, API URLs containing the token, or commit `.env`.
+`npm run check` also sends Telegram notifications when stock is available; it is not a dry run.
 
-## Perilaku
+## Behavior
 
-- Cek langsung saat mulai; cek berikutnya setelah putaran selesai ditambah interval.
-- Timeout tiap request 20 detik. Putaran tidak tumpang tindih.
-- Satu notifikasi per plan selama stok masih tersedia.
-- Setelah `out-of-stock`, notifikasi diaktifkan lagi untuk restock berikutnya.
-- Pengiriman gagal dicoba lagi pada putaran berikutnya. Error satu plan tidak menghentikan plan lain.
-- Deduplikasi hanya di memori. Restart proses bisa mengirim ulang stok yang masih tersedia.
-- Jika Telegram menerima pesan tetapi respons terputus, pesan bisa terkirim ulang.
-- Hentikan dengan Ctrl+C. Tidak membeli VPS otomatis.
+- Checks immediately on startup; subsequent checks run after each round finishes plus the configured interval.
+- Stock and message requests time out after 20 seconds. Stock-check rounds do not overlap.
+- Sends a notification for each available plan on every check round, even if stock remains available.
+- An `out-of-stock` or unknown result sends no notification. Checks continue normally.
+- The OVH API exposes availability, not stock quantities. Messages state that the quantity is unavailable; `daysBeforeDelivery` is not a stock count.
+- Failed notifications are retried in the next round. A failure for one plan does not stop checks for the other.
+- If Telegram accepts a message but its response is lost, the message may be sent again.
+- Stop with Ctrl+C. The monitor does not purchase VPS instances automatically.
 
-## Perintah Telegram
+## Telegram Commands
 
-Saat monitor mulai, menu `/status` didaftarkan otomatis untuk chat terkonfigurasi.
-Jika menu belum muncul, buka ulang chat Telegram; perintah tetap bisa diketik manual.
+On startup, the monitor automatically registers the `/status` menu for the configured chat.
+If the menu is not visible, reopen the Telegram chat. You can also type the command manually.
 
-Kirim `/status` (atau `/status@nama_bot` di grup) dari chat yang sesuai
-`TELEGRAM_CHAT_ID`. Bot membalas bahwa proses aktif, sedang cek atau menunggu,
-interval, waktu cek terakhir (UTC), dan hasil putaran terakhir.
-Perintah ini tidak memicu request stok OVH baru.
+Send `/status` (or `/status@bot_username` in a group) from the chat matching
+`TELEGRAM_CHAT_ID`. The bot reports that the process is active, whether it is
+checking or waiting, the interval, the last completed check time (UTC), and
+the last round's result. This command does not trigger a new OVH stock request.
 
-Listener Telegram berjalan terpisah dari putaran stok menggunakan long polling.
-Hanya jalankan satu proses monitor per token bot. Bot tidak boleh memiliki webhook
-aktif karena `getUpdates` tidak bisa digunakan bersamaan dengan webhook.
-Mode `npm run check` tidak menjalankan listener perintah.
-Jika bot mati atau koneksi Telegram gagal, `/status` tidak dibalas.
+The Telegram listener runs independently of stock-check rounds using long polling.
+Run only one monitor process per bot token. The bot must not have an active webhook,
+because `getUpdates` cannot be used while a webhook is active.
+`npm run check` does not start the command listener.
+If the bot is stopped or its Telegram connection fails, `/status` receives no reply.
 
-## Pengujian
+## Testing
 
-`npm test` memakai `node:test` dan mock API, tanpa jaringan atau kredensial.
-`node --check index.js` memeriksa sintaks. VS Code: pilih task `Test`.
+`npm test` uses `node:test` and mocked APIs, with no network access or credentials required.
+`node --check index.js` checks syntax. In VS Code, select the `Test` task.
 
-## Deployment Ubuntu dengan systemd
+## Ubuntu Deployment with systemd
 
-Pasang Node.js 22+ dan simpan project di `/opt/ovh-stock`. Buat user layanan
-`ovh-stock` yang bisa membaca folder itu. Isi `.env`; batasi akses file dengan
-`chmod 600 .env` dan pastikan pemiliknya `ovh-stock`. Tidak perlu `npm install`.
+Install Node.js 22+ and place the project in `/opt/ovh-stock`. Create an
+`ovh-stock` service user with read access to that directory. Configure `.env`,
+restrict file access with `chmod 600 .env`, and ensure it is owned by `ovh-stock`.
+No `npm install` is needed.
 
-Buat `/etc/systemd/system/ovh-stock.service`:
+Create `/etc/systemd/system/ovh-stock.service`:
 
 ```ini
 [Unit]
@@ -87,13 +90,13 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-Sesuaikan `ExecStart` dengan lokasi Node.js dari `command -v node`.
-Aktifkan lewat `sudo systemctl daemon-reload` lalu
+Adjust `ExecStart` to match the Node.js path returned by `command -v node`.
+Enable the service with `sudo systemctl daemon-reload`, followed by
 `sudo systemctl enable --now ovh-stock`.
-Log: `journalctl -u ovh-stock -f`.
+View logs with `journalctl -u ovh-stock -f`.
 
 ## Maintenance
 
-Ubah spesifikasi/plan di `plans`, OS dan subsidiary di `getStock`, isi pesan
-di `sendTelegram`. Setelah perubahan jalankan pengujian, lalu restart layanan.
-Tidak ada database, framework, atau paket eksternal untuk diperbarui.
+Update specifications and plan codes in `plans`, the OS and subsidiary in
+`getStock`, and notification text in `sendTelegram`. After changes, run the tests
+and restart the service. There is no database, framework, or external package to update.

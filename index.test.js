@@ -81,32 +81,32 @@ test('/status menolak respons Telegram gagal atau tidak valid', async () => {
 for (const status of ['out-of-stock', 'unknown', '']) {
   test(`Tidak kirim Telegram saat linuxStatus ${JSON.stringify(status)}`, async () => {
     const api = mockApi(status);
-    await checkStocks(new Set(), 'token', '123', api.fetchFn, quiet);
+    await checkStocks('token', '123', api.fetchFn, quiet);
     assert.equal(api.messages.length, 0);
   });
 }
 
-test('Kirim kedua plan tersedia sekali, lalu kirim lagi setelah restock', async () => {
-  const notified = new Set();
+test('Kirim kedua plan tersedia setiap putaran dan berhenti saat stok kosong', async () => {
   const available = mockApi('available');
-  await checkStocks(notified, 'token', '123', available.fetchFn, quiet);
-  await checkStocks(notified, 'token', '123', available.fetchFn, quiet);
-  assert.equal(available.messages.length, 2);
+  await checkStocks('token', '123', available.fetchFn, quiet);
+  await checkStocks('token', '123', available.fetchFn, quiet);
+  assert.equal(available.messages.length, 4);
   assert.equal(available.messages[0].chat_id, '123');
   assert.match(available.messages[0].text, /4 core \/ 8 GB RAM/);
   assert.match(available.messages[1].text, /6 core \/ 12 GB RAM/);
   assert.ok(available.messages[0].text.includes('https://www.ovhcloud.com/en/vps/'));
-  await checkStocks(notified, 'token', '123', mockApi().fetchFn, quiet);
-  await checkStocks(notified, 'token', '123', available.fetchFn, quiet);
-  assert.equal(available.messages.length, 4);
+  assert.match(available.messages[0].text, /Jumlah stok: tidak tersedia dari API OVH/);
+  const empty = mockApi();
+  await checkStocks('token', '123', empty.fetchFn, quiet);
+  assert.equal(empty.messages.length, 0);
+  await checkStocks('token', '123', available.fetchFn, quiet);
+  assert.equal(available.messages.length, 6);
 });
 
 test('Telegram gagal: coba lagi pada pengecekan berikutnya', async () => {
-  const notified = new Set();
-  assert.equal(await checkStocks(notified, 'token', '123', mockApi('available', false).fetchFn, quiet), false);
-  assert.equal(notified.size, 0);
+  assert.equal(await checkStocks('token', '123', mockApi('available', false).fetchFn, quiet), false);
   const api = mockApi('available');
-  await checkStocks(notified, 'token', '123', api.fetchFn, quiet);
+  await checkStocks('token', '123', api.fetchFn, quiet);
   assert.equal(api.messages.length, 2);
 });
 
@@ -117,16 +117,17 @@ test('Respons OVH tidak valid ditolak', async () => {
   await assert.rejects(getStock(plans[0], async () => ({ ok: false, status: 503 })), /OVH HTTP 503/);
 });
 
-test('Status tak dikenal tidak menghapus deduplikasi', async () => {
-  const notified = new Set(plans.map(plan => plan.code));
-  await checkStocks(notified, 'token', '123', mockApi('unknown').fetchFn, quiet);
-  assert.equal(notified.size, 2);
+test('Status tak dikenal tetap tanpa notif setelah stok tersedia', async () => {
+  await checkStocks('token', '123', mockApi('available').fetchFn, quiet);
+  const unknown = mockApi('unknown');
+  await checkStocks('token', '123', unknown.fetchFn, quiet);
+  assert.equal(unknown.messages.length, 0);
 });
 
 test('Error tidak membocorkan token; kedua plan tetap diperiksa', async () => {
   const logs = [];
   let calls = 0;
-  await checkStocks(new Set(), 'secret-token', '123', async () => {
+  await checkStocks('secret-token', '123', async () => {
     calls++;
     throw new Error('Error https://api.telegram.org/botsecret-token/sendMessage');
   }, message => logs.push(message));
