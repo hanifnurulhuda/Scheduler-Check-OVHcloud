@@ -1,0 +1,14 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Test",
+			"type": "shell",
+			"command": "node --check index.js; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node --test",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}
